@@ -14,6 +14,7 @@ i18n
       zh: { translation: zh },
     },
     fallbackLng: "en",
+    keySeparator: false,
     interpolation: {
       escapeValue: false,
     },
