@@ -1,52 +1,16 @@
+import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import { Identity } from "./Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
 import { deriveProjectUrlKey, type ActivityEvent, type Agent } from "@paperclipai/shared";
-
-const ACTION_VERBS: Record<string, string> = {
-  "issue.created": "created",
-  "issue.updated": "updated",
-  "issue.checked_out": "checked out",
-  "issue.released": "released",
-  "issue.comment_added": "commented on",
-  "issue.attachment_added": "attached file to",
-  "issue.attachment_removed": "removed attachment from",
-  "issue.document_created": "created document for",
-  "issue.document_updated": "updated document on",
-  "issue.document_deleted": "deleted document from",
-  "issue.commented": "commented on",
-  "issue.deleted": "deleted",
-  "agent.created": "created",
-  "agent.updated": "updated",
-  "agent.paused": "paused",
-  "agent.resumed": "resumed",
-  "agent.terminated": "terminated",
-  "agent.key_created": "created API key for",
-  "agent.budget_updated": "updated budget for",
-  "agent.runtime_session_reset": "reset session for",
-  "heartbeat.invoked": "invoked heartbeat for",
-  "heartbeat.cancelled": "cancelled heartbeat for",
-  "approval.created": "requested approval",
-  "approval.approved": "approved",
-  "approval.rejected": "rejected",
-  "project.created": "created",
-  "project.updated": "updated",
-  "project.deleted": "deleted",
-  "goal.created": "created",
-  "goal.updated": "updated",
-  "goal.deleted": "deleted",
-  "cost.reported": "reported cost for",
-  "cost.recorded": "recorded cost for",
-  "company.created": "created company",
-  "company.updated": "updated company",
-  "company.archived": "archived",
-  "company.budget_updated": "updated budget for",
-};
+import i18n from "../i18n";
 
 function humanizeValue(value: unknown): string {
-  if (typeof value !== "string") return String(value ?? "none");
-  return value.replace(/_/g, " ");
+  if (typeof value !== "string") return String(value ?? i18n.t("common.none"));
+  const key = `status.${value}`;
+  const translated = i18n.t(key, { defaultValue: "" });
+  return translated || value.replace(/_/g, " ");
 }
 
 function formatVerb(action: string, details?: Record<string, unknown> | null): string {
@@ -55,17 +19,19 @@ function formatVerb(action: string, details?: Record<string, unknown> | null): s
     if (details.status !== undefined) {
       const from = previous.status;
       return from
-        ? `changed status from ${humanizeValue(from)} to ${humanizeValue(details.status)} on`
-        : `changed status to ${humanizeValue(details.status)} on`;
+        ? i18n.t("activity.statusChangedFromTo", { from: humanizeValue(from), to: humanizeValue(details.status) })
+        : i18n.t("activity.statusChangedTo", { to: humanizeValue(details.status) });
     }
     if (details.priority !== undefined) {
       const from = previous.priority;
       return from
-        ? `changed priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)} on`
-        : `changed priority to ${humanizeValue(details.priority)} on`;
+        ? i18n.t("activity.priorityChangedFromTo", { from: humanizeValue(from), to: humanizeValue(details.priority) })
+        : i18n.t("activity.priorityChangedTo", { to: humanizeValue(details.priority) });
     }
   }
-  return ACTION_VERBS[action] ?? action.replace(/[._]/g, " ");
+  const verbKey = `activity.verb.${action}`;
+  const translated = i18n.t(verbKey, { defaultValue: "" });
+  return translated || action.replace(/[._]/g, " ");
 }
 
 function entityLink(entityType: string, entityId: string, name?: string | null): string | null {
@@ -88,6 +54,7 @@ interface ActivityRowProps {
 }
 
 export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, className }: ActivityRowProps) {
+  const { t } = useTranslation();
   const verb = formatVerb(event.action, event.details);
 
   const isHeartbeatEvent = event.entityType === "heartbeat_run";
@@ -106,7 +73,7 @@ export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, cl
     : entityLink(event.entityType, event.entityId, name);
 
   const actor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
-  const actorName = actor?.name ?? (event.actorType === "system" ? "System" : event.actorType === "user" ? "Board" : event.actorId || "Unknown");
+  const actorName = actor?.name ?? (event.actorType === "system" ? t("common.system") : event.actorType === "user" ? t("common.board") : event.actorId || t("common.unknown"));
 
   const inner = (
     <div className="flex gap-3">
