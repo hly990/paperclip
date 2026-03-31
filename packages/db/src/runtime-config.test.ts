@@ -64,8 +64,34 @@ describe("resolveDatabaseTarget", () => {
     });
   });
 
+  it("uses DATABASE_URL from ancestor .env (e.g. repo root) when paperclip env omits it", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    const paperclipHome = path.join(tempDir, "pc-home");
+    process.env.PAPERCLIP_HOME = paperclipHome;
+    const repoRoot = path.join(tempDir, "repo");
+    const nestedPkg = path.join(repoRoot, "packages", "db");
+    fs.mkdirSync(nestedPkg, { recursive: true });
+    process.chdir(nestedPkg);
+    delete process.env.PAPERCLIP_CONFIG;
+    delete process.env.DATABASE_URL;
+
+    writeJson(path.join(paperclipHome, "instances", "default", "config.json"), {
+      database: { mode: "embedded-postgres", embeddedPostgresPort: 54329 },
+    });
+    writeText(path.join(repoRoot, ".env"), "DATABASE_URL=postgres://ancestor@localhost/paperclip\n");
+
+    const target = resolveDatabaseTarget();
+
+    expect(target).toMatchObject({
+      mode: "postgres",
+      connectionString: "postgres://ancestor@localhost/paperclip",
+      source: "repo-env",
+    });
+  });
+
   it("uses config postgres connection string when configured", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    process.chdir(tempDir);
     const configPath = path.join(tempDir, "instance", "config.json");
     process.env.PAPERCLIP_CONFIG = configPath;
     writeJson(configPath, {
@@ -86,6 +112,7 @@ describe("resolveDatabaseTarget", () => {
 
   it("falls back to embedded postgres settings from config", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-db-runtime-"));
+    process.chdir(tempDir);
     const configPath = path.join(tempDir, "instance", "config.json");
     process.env.PAPERCLIP_CONFIG = configPath;
     writeJson(configPath, {

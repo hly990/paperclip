@@ -47,6 +47,20 @@ cp .env.example .env
 # DATABASE_URL=postgres://paperclip:paperclip@localhost:5432/paperclip
 ```
 
+The server reads **only** `DATABASE_URL` for external Postgres (not separate `DATABASE_HOST` / `DATABASE_NAME` variables). The database name in the URL path must already exist—for example:
+
+```sh
+psql "postgres://paperclip:paperclip@localhost:5432/postgres" -c "CREATE DATABASE paperclip;"
+```
+
+Using the `postgres` superuser (maintenance DB `postgres`):
+
+```sh
+psql "postgresql://postgres:YOUR_PASSWORD@localhost:5432/postgres" -c "CREATE DATABASE paperclip;"
+```
+
+(Adjust user, password, and host to match your install.)
+
 Run migrations (once the migration generation issue is fixed) or use `drizzle-kit push`:
 
 ```sh

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -22,7 +22,7 @@ export type ResolvedDatabaseTarget =
   | {
       mode: "postgres";
       connectionString: string;
-      source: "DATABASE_URL" | "paperclip-env" | "config.database.connectionString";
+      source: "DATABASE_URL" | "paperclip-env" | "repo-env" | "config.database.connectionString";
       configPath: string;
       envPath: string;
     }
@@ -132,6 +132,40 @@ function readEnvEntries(envPath: string): Record<string, string> {
   return parseEnvFile(readFileSync(envPath, "utf8"));
 }
 
+function realpathIfExists(filePath: string): string | null {
+  if (!existsSync(filePath)) return null;
+  try {
+    return realpathSync(filePath);
+  } catch {
+    return path.resolve(filePath);
+  }
+}
+
+function findDatabaseUrlInAncestorEnvFiles(skipEnvRealpath: string | null): string | undefined {
+  const seen = new Set<string>();
+  let dir = path.resolve(process.cwd());
+
+  while (true) {
+    const candidate = path.join(dir, ENV_BASENAME);
+    const candidateReal = realpathIfExists(candidate);
+    if (candidateReal) {
+      if (skipEnvRealpath !== null && candidateReal === skipEnvRealpath) {
+        // Already merged from the Paperclip instance .env beside config.json.
+      } else if (!seen.has(candidateReal)) {
+        seen.add(candidateReal);
+        const url = readEnvEntries(candidate).DATABASE_URL?.trim();
+        if (url) return url;
+      }
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return undefined;
+}
+
 function migrateLegacyConfig(raw: unknown): PartialConfig | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
 
@@ -234,6 +268,18 @@ export function resolveDatabaseTarget(): ResolvedDatabaseTarget {
       mode: "postgres",
       connectionString: fileEnvUrl,
       source: "paperclip-env",
+      configPath,
+      envPath,
+    };
+  }
+
+  const skipEnvRealpath = realpathIfExists(envPath);
+  const ancestorEnvUrl = findDatabaseUrlInAncestorEnvFiles(skipEnvRealpath);
+  if (ancestorEnvUrl) {
+    return {
+      mode: "postgres",
+      connectionString: ancestorEnvUrl,
+      source: "repo-env",
       configPath,
       envPath,
     };

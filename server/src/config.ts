@@ -1,6 +1,6 @@
 import { readConfigFile } from "./config-file.js";
 import { existsSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
 import { resolvePaperclipEnvPath } from "./paths.js";
 import { maybeRepairLegacyWorktreeConfigAndEnvFiles } from "./worktree-config.js";
@@ -24,9 +24,26 @@ import {
   resolveHomeAwarePath,
 } from "./home-paths.js";
 
+function realpathIfExists(filePath: string): string | null {
+  if (!existsSync(filePath)) return null;
+  try {
+    return realpathSync(filePath);
+  } catch {
+    return resolve(filePath);
+  }
+}
+
+const loadedDotenvRealpaths = new Set<string>();
+function loadEnvFileIfNew(filePath: string): void {
+  const real = realpathIfExists(filePath);
+  if (!real || loadedDotenvRealpaths.has(real)) return;
+  loadedDotenvRealpaths.add(real);
+  loadDotenv({ path: filePath, override: false, quiet: true });
+}
+
 const PAPERCLIP_ENV_FILE_PATH = resolvePaperclipEnvPath();
 if (existsSync(PAPERCLIP_ENV_FILE_PATH)) {
-  loadDotenv({ path: PAPERCLIP_ENV_FILE_PATH, override: false, quiet: true });
+  loadEnvFileIfNew(PAPERCLIP_ENV_FILE_PATH);
 }
 
 const CWD_ENV_PATH = resolve(process.cwd(), ".env");
@@ -34,7 +51,16 @@ const isSameFile = existsSync(CWD_ENV_PATH) && existsSync(PAPERCLIP_ENV_FILE_PAT
   ? realpathSync(CWD_ENV_PATH) === realpathSync(PAPERCLIP_ENV_FILE_PATH)
   : CWD_ENV_PATH === PAPERCLIP_ENV_FILE_PATH;
 if (!isSameFile && existsSync(CWD_ENV_PATH)) {
-  loadDotenv({ path: CWD_ENV_PATH, override: false, quiet: true });
+  loadEnvFileIfNew(CWD_ENV_PATH);
+}
+
+// Monorepo: e.g. cwd is `server/` but `DATABASE_URL` lives in repo-root `.env`.
+let scanDir = resolve(process.cwd());
+while (true) {
+  const parent = dirname(scanDir);
+  if (parent === scanDir) break;
+  scanDir = parent;
+  loadEnvFileIfNew(resolve(scanDir, ".env"));
 }
 
 maybeRepairLegacyWorktreeConfigAndEnvFiles();
